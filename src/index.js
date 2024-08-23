@@ -56,19 +56,20 @@ class CoCreateSitemap {
 
             // Perform regex search starting at the pathname
             const regexPattern = `<url>\\s*<loc>.*?${file.sitemap.pathname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*?</loc>[\\s\\S]*?</url>`;
-            const match = sitemap.match(new RegExp(regexPattern));
+            const match = sitemap.src.match(new RegExp(regexPattern));
 
             if (match) {
                 const position = match.index; // Start position of the <url> block
                 const endPosition = match.index + match[0].length; // End position of the <url> block
 
                 // Replace the original <url> block with the modified one
-                sitemap = sitemap.slice(0, position) + entry + sitemap.slice(endPosition);
+                sitemap = sitemap.src.slice(0, position) + entry + sitemap.slice(endPosition);
             } else {
-                sitemap = sitemap.replace('</urlset>', `${entry}</urlset>`);
+                sitemap = sitemap.src.replace('</urlset>', `${entry}</urlset>`);
             }
 
-            this.saveSitemap(mainSitemap, sitemap);
+            this.saveSitemap(mainSitemap);
+            this.saveSitemap(sitemap);
 
             // console.log('Sitemap updated successfully.');
         } catch (err) {
@@ -77,6 +78,9 @@ class CoCreateSitemap {
     }
 
     createEntry(file) {
+        if (file.sitemap)
+            file.sitemap = {}
+
         file.sitemap.lastmod = file.modified.on;
         let entry = `\t<url>\n`;
 
@@ -84,19 +88,19 @@ class CoCreateSitemap {
             if (key === 'pathname')
                 continue
             const value = file.sitemap[key];
-            if (key === '')
-                if (typeof value === 'object' && value !== null) {
-                    entry += `\t\t<${key}:${key}>\n`;
 
-                    for (const nestedKey of Object.keys(value)) {
-                        const nestedValue = value[nestedKey];
-                        entry += `\t\t\t<${key}:${nestedKey}>${nestedValue}</${key}:${nestedKey}>\n`;
-                    }
+            if (typeof value === 'object' && value !== null) {
+                entry += `\t\t<${key}:${key}>\n`;
 
-                    entry += `\t\t</${key}:${key}>\n`;
-                } else {
-                    entry += `\t\t<${key}>${value}</${key}>\n`;
+                for (const nestedKey of Object.keys(value)) {
+                    const nestedValue = value[nestedKey];
+                    entry += `\t\t\t<${key}:${nestedKey}>${nestedValue}</${key}:${nestedKey}>\n`;
                 }
+
+                entry += `\t\t</${key}:${key}>\n`;
+            } else {
+                entry += `\t\t<${key}>${value}</${key}>\n`;
+            }
         }
 
         entry += `\t</url>\n`;
@@ -105,10 +109,26 @@ class CoCreateSitemap {
     }
 
     async getSitemap(file) {
-        let mainSitemap = await this.readSitemap('/sitemap.xml');
-        if (!mainSitemap)
-            mainSitemap = this.createSitemap('main')
-        let sitemap
+        let mainSitemap = {
+            host: file.host,
+            name: 'sitemap.xml',
+            path: '/',
+            pathname: '/sitemap.xml',
+            directory: '/',
+            public: true
+        }
+
+        mainSitemap = await this.readSitemap(mainSitemap);
+        if (!mainSitemap.src)
+            mainSitemap.src = this.createSitemap('main')
+
+        let sitemap = {
+            host: file.host,
+            path: '/',
+            pathname: file.sitemap.pathname,
+            directory: '/',
+            public: true
+        }
 
         // Update loc using pathname
         file.sitemap.loc = `${file.pathname}`
@@ -116,10 +136,10 @@ class CoCreateSitemap {
 
         // Query the database for the correct sitemap based on the loc and type
         if (file.sitemap.pathname) {
-            sitemap = await this.readSitemap(file.sitemap.pathname);
+            sitemap = await this.readSitemap(sitemap);
         }
 
-        if (!sitemap) {
+        if (!sitemap.src) {
             let type = 'sitemap';
 
             // Identify content type to determine sitemap type
@@ -137,12 +157,15 @@ class CoCreateSitemap {
 
             // If no existing sitemap found check last index sitemap
             let index = await this.getLastSitemapIndex(mainSitemap, name);
-            if (index)
-                sitemap = await this.readSitemap(`/${name}${index}.xml`);
-
+            if (index) {
+                sitemap.pathname = `/${name}${index}.xml`
+                sitemap = await this.readSitemap(sitemap);
+            }
             // Check if there's room in the last index sitemap
-            if (!this.checkSitemap(sitemap)) {
-                sitemap = this.createSitemap(type);
+            if (!this.checkSitemap(sitemap.src)) {
+                sitemap.name = `${name}${index + 1}.xml`
+                sitemap.pathname = `/${name}${index + 1}.xml`
+                sitemap.src = this.createSitemap(type);
 
                 // Add the new sitemap entry
                 const indexEntry = `\n<sitemap>\n\t<loc>{{$host}}/${name}${index + 1}.xml</loc>\n</sitemap>`;
@@ -163,7 +186,7 @@ class CoCreateSitemap {
             $filter: {
                 query: {
                     host: { $in: [file.host, '*'] },
-                    $or: []
+                    pathname: file.pathname
                 },
                 limit: 1
             }
@@ -171,6 +194,8 @@ class CoCreateSitemap {
         data = crud.send(data)
         if (data.object && data.object.length)
             return data.object[0]
+        else
+            return file
 
     }
 
@@ -191,10 +216,11 @@ class CoCreateSitemap {
             $filter: {
                 query: {
                     host: { $in: [file.host, '*'] },
-                    $or: []
+                    pathname: file.pathname
                 },
                 limit: 1
             },
+            object: file,
             upsert: true
         }
         crud.send(data)
@@ -204,11 +230,11 @@ class CoCreateSitemap {
         try {
             // Use regex to match all sitemap entries for the given type
             const regex = new RegExp(`\\/${filename}(\\d*)\\.xml<\\/loc>`, 'g');
-            const matches = mainSitemap.match(regex);
+            const matches = mainSitemap.src.match(regex);
 
-            return matches.length;
+            return matches ? matches.length : 0;
         } catch (err) {
-            console.error(`Error determining next sitemap index for type ${type}:`, err);
+            console.error(`Error determining next sitemap index for ${filename}:`, err);
             return null; // Or some default value or throw an error
         }
     }
