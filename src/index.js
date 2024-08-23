@@ -26,16 +26,25 @@ class CoCreateSitemap {
     }
 
     async check(file, host) {
-        if (!file.sitemap)
-            return
+        // Ensure the file is HTML and does not have a sitemap object yet
+        if (!file.sitemap && file['content-type'] !== 'text/html')
+            return;
+
+        // Ensure the file is public
+        if (!file.public || file.public === "false")
+            return;
+
+        // Check if the file is HTML and contains a noindex meta tag
+        if (file['content-type'] === 'text/html' && file.src.includes('<meta name="robots" content="noindex">'))
+            return;
 
         // Compare the lastmod date in the sitemap with the modified.on date
-        if (file.sitemap.lastmod && file.modified.on) {
+        if (file.sitemap && file.sitemap.lastmod && file.modified.on) {
             if (new Date(file.sitemap.lastmod) >= new Date(file.modified.on))
                 return;
         }
 
-        // Here you would add logic to update the sitemap
+        // Logic to update the sitemap
         this.updateSitemap(file, host);
     }
 
