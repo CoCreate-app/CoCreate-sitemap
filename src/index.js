@@ -48,28 +48,35 @@ class CoCreateSitemap {
         this.updateSitemap(file, host);
     }
 
-    async updateSitemap(file) {
+    async updateSitemap(file, host) {
         try {
+            // TODO: need to get info such as host
             const entry = this.createEntry(file);
 
-            let { mainSitemap, sitemap } = this.getSitemap(file);
+            let { mainSitemap, sitemap } = await this.getSitemap(file, host);
 
-            // Perform regex search starting at the pathname
-            const regexPattern = `<url>\\s*<loc>.*?${file.sitemap.pathname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*?</loc>[\\s\\S]*?</url>`;
-            const match = sitemap.src.match(new RegExp(regexPattern));
+            if (file.sitemap.pathname) {
+                // Perform regex search starting at the pathname
+                const regexPattern = `<url>\\s*<loc>.*?${file.sitemap.pathname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*?</loc>[\\s\\S]*?</url>`;
+                const match = sitemap.src.match(new RegExp(regexPattern));
 
-            if (match) {
-                const position = match.index; // Start position of the <url> block
-                const endPosition = match.index + match[0].length; // End position of the <url> block
+                if (match) {
+                    const position = match.index; // Start position of the <url> block
+                    const endPosition = match.index + match[0].length; // End position of the <url> block
 
-                // Replace the original <url> block with the modified one
-                sitemap = sitemap.src.slice(0, position) + entry + sitemap.slice(endPosition);
+                    // Replace the original <url> block with the modified one
+                    sitemap.src = sitemap.src.slice(0, position) + entry + sitemap.src.slice(endPosition);
+                } else {
+                    sitemap.src = sitemap.src.replace('</urlset>', `${entry}</urlset>`);
+                }
             } else {
-                sitemap = sitemap.src.replace('</urlset>', `${entry}</urlset>`);
+                file.sitemap.pathname = sitemap.pathname
+                sitemap.src = sitemap.src.replace('</urlset>', `${entry}</urlset>`);
             }
 
-            this.saveSitemap(mainSitemap);
-            this.saveSitemap(sitemap);
+            this.saveSitemap(mainSitemap, host);
+            this.saveSitemap(sitemap, host);
+            this.saveSitemap(file, host);
 
             // console.log('Sitemap updated successfully.');
         } catch (err) {
@@ -78,10 +85,19 @@ class CoCreateSitemap {
     }
 
     createEntry(file) {
-        if (file.sitemap)
-            file.sitemap = {}
+        const depth = (file.pathname.match(/\//g) || []).length;
+        const priority = Math.max(0.1, 1.0 - (depth - 1) * 0.1).toFixed(1);
 
+        const defaultKeys = {
+            loc: file.pathname,
+            lastmod: file.modified.on,
+            changefreq: 'monthly', // Example default value
+            priority: priority,
+        };
+        // Merge default keys with file.sitemap, prioritizing file.sitemap values
+        file.sitemap = { ...defaultKeys, ...file.sitemap };
         file.sitemap.lastmod = file.modified.on;
+
         let entry = `\t<url>\n`;
 
         for (const key of Object.keys(file.sitemap)) {
@@ -108,17 +124,19 @@ class CoCreateSitemap {
         return entry;
     }
 
-    async getSitemap(file) {
+    async getSitemap(file, host) {
         let mainSitemap = {
             host: file.host,
             name: 'sitemap.xml',
             path: '/',
             pathname: '/sitemap.xml',
             directory: '/',
-            public: true
+            'content-type': 'application/xml',
+            public: true,
+            organization_id: file.organization_id
         }
 
-        mainSitemap = await this.readSitemap(mainSitemap);
+        mainSitemap = await this.readSitemap(mainSitemap, host);
         if (!mainSitemap.src)
             mainSitemap.src = this.createSitemap('main')
 
@@ -127,7 +145,9 @@ class CoCreateSitemap {
             path: '/',
             pathname: file.sitemap.pathname,
             directory: '/',
-            public: true
+            'content-type': 'application/xml',
+            public: true,
+            organization_id: file.organization_id
         }
 
         // Update loc using pathname
@@ -136,16 +156,16 @@ class CoCreateSitemap {
 
         // Query the database for the correct sitemap based on the loc and type
         if (file.sitemap.pathname) {
-            sitemap = await this.readSitemap(sitemap);
+            sitemap = await this.readSitemap(sitemap, host);
         }
 
         if (!sitemap.src) {
             let type = 'sitemap';
 
             // Identify content type to determine sitemap type
-            if (file.contentType.startsWith('image/')) {
+            if (file['content-type'].startsWith('image/')) {
                 type = 'image';
-            } else if (file.contentType.startsWith('video/')) {
+            } else if (file['content-type'].startsWith('video/')) {
                 type = 'video';
             } else if (file.sitemap.news) {
                 // type = 'news';
@@ -159,17 +179,20 @@ class CoCreateSitemap {
             let index = await this.getLastSitemapIndex(mainSitemap, name);
             if (index) {
                 sitemap.pathname = `/${name}${index}.xml`
-                sitemap = await this.readSitemap(sitemap);
+                sitemap = await this.readSitemap(sitemap, host);
             }
+
             // Check if there's room in the last index sitemap
             if (!this.checkSitemap(sitemap.src)) {
-                sitemap.name = `${name}${index + 1}.xml`
-                sitemap.pathname = `/${name}${index + 1}.xml`
+                if (sitemap.src)
+                    index += 1
+                sitemap.name = `${name}${index}.xml`
+                sitemap.pathname = `/${name}${index}.xml`
                 sitemap.src = this.createSitemap(type);
 
                 // Add the new sitemap entry
-                const indexEntry = `\n<sitemap>\n\t<loc>{{$host}}/${name}${index + 1}.xml</loc>\n</sitemap>`;
-                mainSitemap = mainSitemap.replace('</sitemapindex>', `${indexEntry}\n</sitemapindex>`);
+                const indexEntry = `\n<sitemap>\n\t<loc>{{$host}}/${name}${index}.xml</loc>\n</sitemap>`;
+                mainSitemap.src = mainSitemap.src.replace('</sitemapindex>', `${indexEntry}\n</sitemapindex>`);
 
             }
 
@@ -178,25 +201,25 @@ class CoCreateSitemap {
         return { mainSitemap, sitemap }
     }
 
-    readSitemap(file) {
+    async readSitemap(file, host) {
         let data = {
             method: 'object.read',
-            host: file.host,
+            host: host,
             array: 'files',
             $filter: {
                 query: {
-                    host: { $in: [file.host, '*'] },
+                    host: { $in: [host, '*'] },
                     pathname: file.pathname
                 },
                 limit: 1
-            }
+            },
+            organization_id: file.organization_id
         }
-        data = crud.send(data)
+        data = await this.crud.send(data)
         if (data.object && data.object.length)
             return data.object[0]
         else
             return file
-
     }
 
     createSitemap(type) {
@@ -208,22 +231,26 @@ class CoCreateSitemap {
             return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n</urlset>`;
     }
 
-    saveSitemap(file) {
+    async saveSitemap(file, host) {
         let data = {
             method: 'object.update',
-            host: file.host,
+            host: host,
             array: 'files',
-            $filter: {
+            object: file,
+            upsert: true,
+            organization_id: file.organization_id
+        }
+        if (!file._id)
+            data.$filter = {
                 query: {
-                    host: { $in: [file.host, '*'] },
+                    host: { $in: [host, '*'] },
                     pathname: file.pathname
                 },
                 limit: 1
-            },
-            object: file,
-            upsert: true
-        }
-        crud.send(data)
+            }
+
+        data = await this.crud.send(data)
+
     }
 
     async getLastSitemapIndex(mainSitemap, filename) {
@@ -239,8 +266,11 @@ class CoCreateSitemap {
         }
     }
 
-    async checkSitemap(sitemap) {
+    checkSitemap(sitemap) {
         try {
+            if (!sitemap)
+                return false
+
             // Count the number of <url> entries
             const urlCount = (sitemap.match(/<url>/g) || []).length;
             if (urlCount >= 50000)
