@@ -157,6 +157,20 @@ class CoCreateSitemap {
         // Query the database for the correct sitemap based on the loc and type
         if (file.sitemap.pathname) {
             sitemap = await this.readSitemap(sitemap, host);
+            const escapedPathname = file.sitemap.pathname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            // Create the regex pattern to match the <sitemap> block containing the specific <loc> for the pathname
+            const regexPattern = `<sitemap>\\s*<loc>[^<]*${escapedPathname}[^<]*</loc>[\\s\\S]*?</sitemap>`;
+
+            // Execute the regex match against the sitemap index source
+            const match = mainSitemap.src.match(new RegExp(regexPattern));
+
+            // Check if a match is found
+            if (!match) {
+                //TODO: if sitemap found but not in index should we add to sitemap pathname to index or should we check the sitmap for the next index available see if room add or create new index. 
+                const indexEntry = `\n<sitemap>\n\t<loc>{{$host}}${sitemap.pathname}</loc>\n</sitemap>`;
+                mainSitemap.src = mainSitemap.src.replace('</sitemapindex>', `${indexEntry}\n</sitemapindex>`);
+            }
         }
 
         if (!sitemap.src) {
