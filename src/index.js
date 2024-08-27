@@ -35,7 +35,8 @@ class CoCreateSitemap {
             return;
 
         // Check if the file is HTML and contains a noindex meta tag
-        if (file['content-type'] === 'text/html' && file.src.includes('<meta name="robots" content="noindex">'))
+        if (file['content-type'] === 'text/html'
+            && /<meta\s+name=["']robots["']\s+content=["'][^"']*noindex[^"']*["']/i.test(file.src))
             return;
 
         // Compare the lastmod date in the sitemap with the modified.on date
@@ -55,9 +56,9 @@ class CoCreateSitemap {
 
             let { mainSitemap, sitemap } = await this.getSitemap(file, host);
 
-            if (file.sitemap.pathname) {
+            if (file.pathname) {
                 // Perform regex search starting at the pathname
-                const regexPattern = `<url>\\s*<loc>.*?${file.sitemap.pathname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*?</loc>[\\s\\S]*?</url>`;
+                const regexPattern = `<url>\\s*<loc>.*?${file.pathname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*?</loc>[\\s\\S]*?</url>`;
                 const match = sitemap.src.match(new RegExp(regexPattern));
 
                 if (match) {
@@ -103,17 +104,21 @@ class CoCreateSitemap {
         for (const key of Object.keys(file.sitemap)) {
             if (key === 'pathname')
                 continue
-            const value = file.sitemap[key];
+            let value = file.sitemap[key];
 
-            if (typeof value === 'object' && value !== null) {
-                entry += `\t\t<${key}:${key}>\n`;
+            if (typeof value === 'object' && value !== null && !(value instanceof Date)) {
+                if (!Array.isArray(value))
+                    value = [value]
+                for (let i = 0; i < value.length; i++) {
+                    entry += `\t\t<${key}:${key}>\n`;
 
-                for (const nestedKey of Object.keys(value)) {
-                    const nestedValue = value[nestedKey];
-                    entry += `\t\t\t<${key}:${nestedKey}>${nestedValue}</${key}:${nestedKey}>\n`;
+                    for (const nestedKey of Object.keys(value[i])) {
+                        const nestedValue = value[nestedKey];
+                        entry += `\t\t\t<${key}:${nestedKey}>${nestedValue}</${key}:${nestedKey}>\n`;
+                    }
+
+                    entry += `\t\t</${key}:${key}>\n`;
                 }
-
-                entry += `\t\t</${key}:${key}>\n`;
             } else {
                 entry += `\t\t<${key}>${value}</${key}>\n`;
             }
@@ -157,20 +162,6 @@ class CoCreateSitemap {
         // Query the database for the correct sitemap based on the loc and type
         if (file.sitemap.pathname) {
             sitemap = await this.readSitemap(sitemap, host);
-            const escapedPathname = file.sitemap.pathname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-            // Create the regex pattern to match the <sitemap> block containing the specific <loc> for the pathname
-            const regexPattern = `<sitemap>\\s*<loc>[^<]*${escapedPathname}[^<]*</loc>[\\s\\S]*?</sitemap>`;
-
-            // Execute the regex match against the sitemap index source
-            const match = mainSitemap.src.match(new RegExp(regexPattern));
-
-            // Check if a match is found
-            if (!match) {
-                //TODO: if sitemap found but not in index should we add to sitemap pathname to index or should we check the sitmap for the next index available see if room add or create new index. 
-                const indexEntry = `\n<sitemap>\n\t<loc>{{$host}}${sitemap.pathname}</loc>\n</sitemap>`;
-                mainSitemap.src = mainSitemap.src.replace('</sitemapindex>', `${indexEntry}\n</sitemapindex>`);
-            }
         }
 
         if (!sitemap.src) {
@@ -194,22 +185,35 @@ class CoCreateSitemap {
             if (index) {
                 sitemap.pathname = `/${name}${index}.xml`
                 sitemap = await this.readSitemap(sitemap, host);
+            } else {
+                index = 1
             }
 
             // Check if there's room in the last index sitemap
             if (!this.checkSitemap(sitemap.src)) {
                 if (sitemap.src)
                     index += 1
+                else
+                    sitemap.src = this.createSitemap(type);
+
                 sitemap.name = `${name}${index}.xml`
                 sitemap.pathname = `/${name}${index}.xml`
-                sitemap.src = this.createSitemap(type);
-
-                // Add the new sitemap entry
-                const indexEntry = `\n<sitemap>\n\t<loc>{{$host}}/${name}${index}.xml</loc>\n</sitemap>`;
-                mainSitemap.src = mainSitemap.src.replace('</sitemapindex>', `${indexEntry}\n</sitemapindex>`);
 
             }
 
+        }
+
+        // Create the regex pattern to match the <sitemap> block containing the specific <loc> for the pathname
+        const regexPattern = `<sitemap>\\s*<loc>[^<]*${sitemap.pathname}[^<]*</loc>[\\s\\S]*?</sitemap>`;
+
+        // Execute the regex match against the sitemap index source
+        const match = mainSitemap.src.match(new RegExp(regexPattern));
+
+        // Check if a match is found
+        if (!match) {
+            //TODO: if sitemap found but not in index should we add to sitemap pathname to index or should we check the sitmap for the next index available see if room add or create new index. 
+            const indexEntry = `\t<sitemap>\n\t\t<loc>{{$host}}${sitemap.pathname}</loc>\n</sitemap>`;
+            mainSitemap.src = mainSitemap.src.replace('</sitemapindex>', `${indexEntry}\n</sitemapindex>`);
         }
 
         return { mainSitemap, sitemap }
@@ -273,7 +277,7 @@ class CoCreateSitemap {
             const regex = new RegExp(`\\/${filename}(\\d*)\\.xml<\\/loc>`, 'g');
             const matches = mainSitemap.src.match(regex);
 
-            return matches ? matches.length : 0;
+            return matches ? matches.length : null;
         } catch (err) {
             console.error(`Error determining next sitemap index for ${filename}:`, err);
             return null; // Or some default value or throw an error
