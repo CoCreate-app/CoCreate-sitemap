@@ -20,6 +20,8 @@
 // you must obtain a commercial license from CoCreate LLC.
 // For details, visit <https://cocreate.app/licenses/> or contact us at sales@cocreate.app.
 
+const { parse } = require("node-html-parser");
+
 class CoCreateSitemap {
     constructor(crud) {
         this.crud = crud;
@@ -86,23 +88,27 @@ class CoCreateSitemap {
     }
 
     createEntry(file) {
-        const depth = (file.pathname.match(/\//g) || []).length;
-        const priority = Math.max(0.1, 1.0 - (depth - 1) * 0.1).toFixed(1);
-
-        const defaultKeys = {
-            loc: file.pathname,
-            lastmod: file.modified.on,
-            changefreq: 'monthly', // Example default value
-            priority: priority,
-        };
-        // Merge default keys with file.sitemap, prioritizing file.sitemap values
-        file.sitemap = { ...defaultKeys, ...file.sitemap };
+        file.sitemap.loc = file.pathname;
         file.sitemap.lastmod = file.modified.on;
+
+        if (file['content-type'] === 'text/html') {
+            parseHtml(file)
+
+            if (file.sitemap.type !== 'news') {
+                if (file.sitemap.changefreq)
+                    file.sitemap.changefreq = 'monthly';
+
+                if (!file.sitemap.priority) {
+                    const depth = (file.pathname.match(/\//g) || []).length;
+                    file.sitemap.priority = Math.max(0.1, 1.0 - (depth - 1) * 0.1).toFixed(1);
+                }
+            }
+        }
 
         let entry = `\t<url>\n`;
 
         for (const key of Object.keys(file.sitemap)) {
-            if (key === 'pathname')
+            if (key === 'pathname' || key === 'type')
                 continue
             let value = file.sitemap[key];
 
@@ -172,8 +178,8 @@ class CoCreateSitemap {
                 type = 'image';
             } else if (file['content-type'].startsWith('video/')) {
                 type = 'video';
-            } else if (file.sitemap.news) {
-                // type = 'news';
+            } else if (file.sitemap.type === 'news') {
+                type = 'news';
             }
 
             let name = `sitemap`
@@ -241,12 +247,24 @@ class CoCreateSitemap {
     }
 
     createSitemap(type) {
-        if (type === 'main')
-            return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n</sitemapindex>`;
-        else if (type === 'image' || type === 'video' || type === 'news')
-            return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:${type}="http://www.google.com/schemas/sitemap-${type}/1.1">\n</urlset>`;
-        else
-            return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n</urlset>`;
+        const xmlDeclaration = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+        const sitemapNamespace = 'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"';
+
+        if (type === 'main') {
+            return `${xmlDeclaration}<sitemapindex ${sitemapNamespace}>\n</sitemapindex>`;
+        } else {
+            const imageNamespace = 'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"';
+            const videoNamespace = 'xmlns:video="http://www.google.com/schemas/sitemap-video/1.1"';
+            const newsNamespace = 'xmlns:news="http://www.google.com/schemas/sitemap-news/0.9"';
+
+            if (type === 'image') {
+                return `${xmlDeclaration}<urlset ${sitemapNamespace} ${imageNamespace}>\n</urlset>`;
+            } else if (type === 'video') {
+                return `${xmlDeclaration}<urlset ${sitemapNamespace} ${videoNamespace}>\n</urlset>`;
+            } else { // For 'news' type or any other types
+                return `${xmlDeclaration}<urlset ${sitemapNamespace} ${newsNamespace} ${imageNamespace} ${videoNamespace}>\n</urlset>`;
+            }
+        }
     }
 
     async saveSitemap(file, host) {
@@ -311,6 +329,101 @@ class CoCreateSitemap {
         }
     }
 
+    parseHtml(file) {
+        const dom = parse(html);
+        const entries = dom.querySelectorAll('[sitemap="true"]');
+
+        let types = ['image', 'video', 'news']
+
+        const previousEntries = {}
+        for (let i = 0; i < types.length; i++) {
+            if (!file.sitemap[types[i]])
+                continue
+            if (Array.isArray(file.sitemap[types[i]]))
+                previousEntries[types[i]] = file.sitemap[types[i]]
+            else
+                previousEntries[types[i]] = [file.sitemap[types[i]]]
+
+            delete file.sitemap[types[i]]
+        }
+
+        for (let i = 0; i < entries.length; i++) {
+            let type = '', query = '';
+            let existingObject
+            let entryObject = {};
+
+            if (entries[i].tagName === 'IMG') {  // Corrected to 'IMG' for images
+                type = 'image';
+                query = 'loc'
+                entryObject.loc = entries[i].src;
+                entryObject.title = entries[i].getAttribute('sitemap-title') || entries[i].getAttribute('title') || entries[i].getAttribute('alt');
+                entryObject.caption = entries[i].getAttribute('sitemap-caption') || entries[i].getAttribute('alt') || entryObject.title;
+                entryObject.geo_location = entries[i].getAttribute('sitemap-geo-location');
+            } else if (entries[i].tagName === 'VIDEO') {
+                type = 'video';
+                query = 'content_loc'
+                entryObject.content_loc = entries[i].src;
+                entryObject.title = entries[i].getAttribute('sitemap-title') || entries[i].getAttribute('title');
+                entryObject.description = entries[i].getAttribute('description');  // 'description' if available
+                entryObject.thumbnail_loc = entries[i].getAttribute('sitemap-thumbnail') || entries[i].getAttribute('poster');
+                entryObject.duration = entries[i].getAttribute('sitemap-duration');
+            } else {
+                type = 'news';
+                file.sitemap.type = 'news';
+                query = 'title'
+                entryObject.title = entries[i].getAttribute('sitemap-title');
+                if (!entryObject.title) {
+                    const title = dom.querySelector('title');
+                    entryObject.title = title ? title.text : '';
+                }
+
+                entryObject.publication = {
+                    name: entries[i].getAttribute('sitemap-publication-name'),  // Use proper attribute
+                    language: entries[i].getAttribute('sitemap-publication-language')  // Use proper attribute
+                };
+
+                if (!entryObject.publication.language) {
+                    // Fallback to HTML lang attribute
+                    const htmlElement = dom.querySelector('html');
+                    entryObject.publication.language = htmlElement ? htmlElement.getAttribute('lang') : null;
+                }
+
+                entryObject.publication_date = entries[i].getAttribute('sitemap-publication-date') || file.modified.on;
+
+                entryObject.keywords = entries[i].getAttribute('sitemap-keywords');
+                if (!entryObject.keywords) {
+                    const keywords = dom.querySelector('meta[name="keywords"]');
+                    entryObject.keywords = keywords ? keywords.getAttribute('content') : '';
+                }
+
+                entryObject.genres = entries[i].getAttribute('sitemap-genres');
+            }
+
+            if (previousEntries[type]) {
+                existingObject = previousEntries[type].find(item => item[query] === entryObject[query]);
+                entryObject = { ...existingObject, ...entryObject }
+            }
+
+            Object.keys(entryObject).forEach(key => {
+                if (!entryObject[key])
+                    delete entryObject[key]
+            });
+
+            if (!file.sitemap[type])
+                file.sitemap[type] = []
+
+            file.sitemap[type].push(entryObject)
+
+        }
+
+        if (file.sitemap.type !== 'news') {
+            const priorityMeta = dom.querySelector('meta[name="sitemap-priority"]');
+            const changefreqMeta = dom.querySelector('meta[name="sitemap-changefreq"]');
+            file.sitemap.priority = priorityMeta ? priorityMeta.getAttribute('content') : file.sitemap.priority; // Default priority if not specified
+            file.sitemap.changefreq = changefreqMeta ? changefreqMeta.getAttribute('content') : file.sitemap.changefreq; // Default changefreq if not specified
+        }
+
+    }
 }
 
 module.exports = CoCreateSitemap;
