@@ -36,15 +36,18 @@ class CoCreateSitemap {
         if (!file.public || file.public === "false")
             return;
 
-        // Check if the file is HTML and contains a noindex meta tag
-        if (file['content-type'] === 'text/html'
-            && /<meta\s+name=["']robots["']\s+content=["'][^"']*noindex[^"']*["']/i.test(file.src))
-            return;
+        // Check if the file is HTML and contains a noindex meta or title tag
+        if (file['content-type'] === 'text/html') {
+            if (/<meta\s+name=["']robots["']\s+content=["'][^"']*noindex[^"']*["']/i.test(file.src))
+                return;
+            if (!(/<title[^>]*>[\s\S]*?<\/title>/i.test(file.src)))
+                return;
+        }
 
         // Compare the lastmod date in the sitemap with the modified.on date
         if (file.sitemap && file.sitemap.lastmod && file.modified.on) {
-            if (new Date(file.sitemap.lastmod) >= new Date(file.modified.on))
-                return;
+            // if (new Date(file.sitemap.lastmod) >= new Date(file.modified.on))
+            //     return;
         }
 
         // Logic to update the sitemap
@@ -53,6 +56,9 @@ class CoCreateSitemap {
 
     async updateSitemap(file, host) {
         try {
+            if (!file.sitemap)
+                file.sitemap = {}
+
             // TODO: need to get info such as host
             const entry = this.createEntry(file);
 
@@ -92,7 +98,7 @@ class CoCreateSitemap {
         file.sitemap.lastmod = file.modified.on;
 
         if (file['content-type'] === 'text/html') {
-            parseHtml(file)
+            this.parseHtml(file)
 
             if (file.sitemap.type !== 'news') {
                 if (file.sitemap.changefreq)
@@ -119,8 +125,19 @@ class CoCreateSitemap {
                     entry += `\t\t<${key}:${key}>\n`;
 
                     for (const nestedKey of Object.keys(value[i])) {
-                        const nestedValue = value[nestedKey];
-                        entry += `\t\t\t<${key}:${nestedKey}>${nestedValue}</${key}:${nestedKey}>\n`;
+                        const nestedValue = value[i][nestedKey];
+
+                        // Handle nested objects
+                        if (typeof nestedValue === 'object' && nestedValue !== null && !(nestedValue instanceof Date)) {
+                            entry += `\t\t\t<${key}:${nestedKey}>\n`;
+                            for (const subKey of Object.keys(nestedValue)) {
+                                const subValue = nestedValue[subKey];
+                                entry += `\t\t\t\t<${key}:${subKey}>${subValue}</${key}:${subKey}>\n`;
+                            }
+                            entry += `\t\t\t</${key}:${nestedKey}>\n`;
+                        } else {
+                            entry += `\t\t\t<${key}:${nestedKey}>${nestedValue}</${key}:${nestedKey}>\n`;
+                        }
                     }
 
                     entry += `\t\t</${key}:${key}>\n`;
@@ -163,7 +180,6 @@ class CoCreateSitemap {
 
         // Update loc using pathname
         file.sitemap.loc = `${file.pathname}`
-
 
         // Query the database for the correct sitemap based on the loc and type
         if (file.sitemap.pathname) {
@@ -330,7 +346,7 @@ class CoCreateSitemap {
     }
 
     parseHtml(file) {
-        const dom = parse(html);
+        const dom = parse(file.src);
         const entries = dom.querySelectorAll('[sitemap="true"]');
 
         let types = ['image', 'video', 'news']
@@ -355,7 +371,7 @@ class CoCreateSitemap {
             if (entries[i].tagName === 'IMG') {  // Corrected to 'IMG' for images
                 type = 'image';
                 query = 'loc'
-                entryObject.loc = entries[i].src;
+                entryObject.loc = entries[i].getAttribute('src');
                 entryObject.title = entries[i].getAttribute('sitemap-title') || entries[i].getAttribute('title') || entries[i].getAttribute('alt');
                 entryObject.caption = entries[i].getAttribute('sitemap-caption') || entries[i].getAttribute('alt') || entryObject.title;
                 entryObject.geo_location = entries[i].getAttribute('sitemap-geo-location');
