@@ -46,8 +46,8 @@ class CoCreateSitemap {
 
         // Compare the lastmod date in the sitemap with the modified.on date
         if (file.sitemap && file.sitemap.lastmod && file.modified.on) {
-            // if (new Date(file.sitemap.lastmod) >= new Date(file.modified.on))
-            //     return;
+            if (new Date(file.sitemap.lastmod) >= new Date(file.modified.on))
+                return;
         }
 
         // Logic to update the sitemap
