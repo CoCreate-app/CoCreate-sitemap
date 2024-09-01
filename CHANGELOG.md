@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.2.0...v1.2.1) (2024-09-01)
+
+
+### Bug Fixes
+
+* return if no title, parse sub object in createEntry ([97d8751](https://github.com/CoCreate-app/CoCreate-sitemap/commit/97d8751808e9f7e43c61de864820905949f89dba))
+
 # [1.2.0](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.1.0...v1.2.0) (2024-08-30)
 
 
