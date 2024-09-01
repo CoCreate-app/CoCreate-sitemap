@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.2.1...v1.2.2) (2024-09-01)
+
+
+### Bug Fixes
+
+* uncomment lastmod compare ([23c74cf](https://github.com/CoCreate-app/CoCreate-sitemap/commit/23c74cfeb20c7bb6dec07ae08a30daa2d8e0ab59))
+
 ## [1.2.1](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.2.0...v1.2.1) (2024-09-01)
 
 
