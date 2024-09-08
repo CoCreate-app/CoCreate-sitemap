@@ -59,8 +59,7 @@ class CoCreateSitemap {
             if (!file.sitemap)
                 file.sitemap = {}
 
-            // TODO: need to get info such as host
-            const entry = this.createEntry(file);
+            const entry = this.createEntry(file, host);
 
             let { mainSitemap, sitemap } = await this.getSitemap(file, host);
 
@@ -101,7 +100,7 @@ class CoCreateSitemap {
             this.parseHtml(file)
 
             if (file.sitemap.type !== 'news') {
-                if (file.sitemap.changefreq)
+                if (!file.sitemap.changefreq)
                     file.sitemap.changefreq = 'monthly';
 
                 if (!file.sitemap.priority) {
@@ -116,17 +115,18 @@ class CoCreateSitemap {
         for (const key of Object.keys(file.sitemap)) {
             if (key === 'pathname' || key === 'type')
                 continue
+
             let value = file.sitemap[key];
 
             if (typeof value === 'object' && value !== null && !(value instanceof Date)) {
                 if (!Array.isArray(value))
                     value = [value]
+
                 for (let i = 0; i < value.length; i++) {
                     entry += `\t\t<${key}:${key}>\n`;
 
                     for (const nestedKey of Object.keys(value[i])) {
-                        const nestedValue = value[i][nestedKey];
-
+                        let nestedValue = value[i][nestedKey];
                         // Handle nested objects
                         if (typeof nestedValue === 'object' && nestedValue !== null && !(nestedValue instanceof Date)) {
                             entry += `\t\t\t<${key}:${nestedKey}>\n`;
@@ -136,6 +136,16 @@ class CoCreateSitemap {
                             }
                             entry += `\t\t\t</${key}:${nestedKey}>\n`;
                         } else {
+                            if (nestedKey === 'loc') {
+                                if (!nestedValue.startsWith('https://') && !nestedValue.startsWith('http://') && !nestedValue.startsWith('{{$host}}')) {
+                                    nestedValue = `{{$host}}${nestedValue}`;
+                                }
+                            } else if (nestedKey === 'publication_date') {
+                                nestedValue = new Date(nestedValue).toISOString().split('.')[0] + "Z";
+                            } else {
+                                nestedValue = this.encodeXML(nestedValue)
+                            }
+
                             entry += `\t\t\t<${key}:${nestedKey}>${nestedValue}</${key}:${nestedKey}>\n`;
                         }
                     }
@@ -143,6 +153,16 @@ class CoCreateSitemap {
                     entry += `\t\t</${key}:${key}>\n`;
                 }
             } else {
+                if (key === 'loc') {
+                    if (!value.startsWith('https://') && !value.startsWith('http://')) {
+                        value = `{{$host}}${value}`;
+                    }
+                } else if (key === 'lastmod') {
+                    value = new Date(file.modified.on).toISOString().split('.')[0] + "Z";
+                } else {
+                    value = this.encodeXML(value)
+                }
+
                 entry += `\t\t<${key}>${value}</${key}>\n`;
             }
         }
@@ -440,6 +460,17 @@ class CoCreateSitemap {
         }
 
     }
+
+    encodeXML(str) {
+        if (str)
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&apos;');
+    }
+
 }
 
 module.exports = CoCreateSitemap;
