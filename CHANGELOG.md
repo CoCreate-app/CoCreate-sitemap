@@ -1,3 +1,10 @@
+## [1.2.3](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.2.2...v1.2.3) (2024-09-08)
+
+
+### Bug Fixes
+
+* encodeValues for characters xml cant parse. Format date correctly ([e928405](https://github.com/CoCreate-app/CoCreate-sitemap/commit/e928405998d5f7492acdd1bb35c67f44c9bce4ad))
+
 ## [1.2.2](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.2.1...v1.2.2) (2024-09-01)
 
 
