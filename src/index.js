@@ -99,7 +99,7 @@ class CoCreateSitemap {
         if (file['content-type'] === 'text/html') {
             this.parseHtml(file)
 
-            if (file.sitemap.type !== 'news') {
+            if (file.sitemap.type !== 'news' && file.sitemap.type !== 'image' && file.sitemap.type !== 'video') {
                 if (!file.sitemap.changefreq)
                     file.sitemap.changefreq = 'monthly';
 
@@ -107,6 +107,9 @@ class CoCreateSitemap {
                     const depth = (file.pathname.match(/\//g) || []).length;
                     file.sitemap.priority = Math.max(0.1, 1.0 - (depth - 1) * 0.1).toFixed(1);
                 }
+            } else {
+                delete file.sitemap.changefreq
+                delete file.sitemap.priority
             }
         }
 
@@ -452,11 +455,11 @@ class CoCreateSitemap {
 
         }
 
-        if (file.sitemap.type !== 'news') {
+        if (file.sitemap.type !== 'news' && file.sitemap.type !== 'image' && file.sitemap.type !== 'video') {
             const priorityMeta = dom.querySelector('meta[name="sitemap-priority"]');
             const changefreqMeta = dom.querySelector('meta[name="sitemap-changefreq"]');
             file.sitemap.priority = priorityMeta ? priorityMeta.getAttribute('content') : file.sitemap.priority; // Default priority if not specified
-            file.sitemap.changefreq = changefreqMeta ? changefreqMeta.getAttribute('content') : file.sitemap.changefreq; // Default changefreq if not specified
+            file.sitemap.changefreq = changefreqMeta ? changefreqMeta.getAttribute('content') : file.sitemap.changefreq || 'monthly'; // Default changefreq if not specified
         }
 
     }
