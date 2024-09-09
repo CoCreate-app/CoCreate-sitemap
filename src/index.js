@@ -32,8 +32,8 @@ class CoCreateSitemap {
         if (!file.sitemap && file['content-type'] !== 'text/html')
             return;
 
-        // Ensure the file is public
-        if (!file.public || file.public === "false")
+        // Ensure the file is public and is not sitemap false
+        if (file.sitemap === false || file.sitemap === 'false' || !file.public || file.public === "false")
             return;
 
         // Check if the file is HTML and contains a noindex meta or title tag
