@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.2.4...v1.3.0) (2024-09-09)
+
+
+### Features
+
+* file.sitemap boolean false will skip sitemap ([ea38ec3](https://github.com/CoCreate-app/CoCreate-sitemap/commit/ea38ec39e9567c4c70d47544834353360460d69e))
+
 ## [1.2.4](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.2.3...v1.2.4) (2024-09-09)
 
 
