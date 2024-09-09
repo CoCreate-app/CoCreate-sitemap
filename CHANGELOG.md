@@ -1,3 +1,10 @@
+## [1.2.4](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.2.3...v1.2.4) (2024-09-09)
+
+
+### Bug Fixes
+
+* undefined changefreq ([a41333f](https://github.com/CoCreate-app/CoCreate-sitemap/commit/a41333f4fa65b18a531a0889211c4a9a04d040ab))
+
 ## [1.2.3](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.2.2...v1.2.3) (2024-09-08)
 
 
