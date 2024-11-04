@@ -1,3 +1,15 @@
+# [1.4.0](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.3.0...v1.4.0) (2024-11-04)
+
+
+### Bug Fixes
+
+* prettier.config options ([fcbcaa4](https://github.com/CoCreate-app/CoCreate-sitemap/commit/fcbcaa491d39934b63b9fd3fc20c8c069a9bb7df))
+
+
+### Features
+
+* add prettier.config.js and format files ([f464417](https://github.com/CoCreate-app/CoCreate-sitemap/commit/f4644172fc854c9a4e59d8c9af82f0dd85cc3dc6))
+
 # [1.3.0](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.2.4...v1.3.0) (2024-09-09)
 
 
