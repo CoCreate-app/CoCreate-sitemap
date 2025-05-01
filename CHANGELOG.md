@@ -1,3 +1,11 @@
+## [1.4.1](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.4.0...v1.4.1) (2025-05-01)
+
+
+### Bug Fixes
+
+* update [@cocreate](https://github.com/cocreate) dependencies ([4a79e69](https://github.com/CoCreate-app/CoCreate-sitemap/commit/4a79e69bb4d02e7912f32d1c260309669a60aaaa))
+* webpack.config and devdependencies ([830fad5](https://github.com/CoCreate-app/CoCreate-sitemap/commit/830fad55c9c0bf969eb42506ec76eb5071ba0a6b))
+
 # [1.4.0](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.3.0...v1.4.0) (2024-11-04)
 
 
