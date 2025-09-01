@@ -1,3 +1,10 @@
+## [1.4.2](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.4.1...v1.4.2) (2025-09-01)
+
+
+### Bug Fixes
+
+* added ToDo comment for future implementation ([b146feb](https://github.com/CoCreate-app/CoCreate-sitemap/commit/b146feb30816b49455143ee6adc5a0395b4f37de))
+
 ## [1.4.1](https://github.com/CoCreate-app/CoCreate-sitemap/compare/v1.4.0...v1.4.1) (2025-05-01)
 
 
